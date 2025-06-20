@@ -1,9 +1,10 @@
 import { app } from '@/app'
+import { prisma } from '@/lib/prisma'
 import { createAndAuthenticateUser } from '@/utils/test/create-and-authenticate-user'
 import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-describe('Search Gyms (e2e)', () => {
+describe('Check-In History (e2e)', () => {
   beforeAll(async () => {
     await app.ready()
   })
@@ -12,44 +13,48 @@ describe('Search Gyms (e2e)', () => {
     await app.close()
   })
 
-  it('should be able to search gyms by title', async () => {
+  it('should be able to list the history of check-ins', async () => {
     const { token } = await createAndAuthenticateUser(app)
 
-    await request(app.server)
-      .post('/gyms')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
+    const user = await prisma.user.findFirstOrThrow()
+
+    const gym = await prisma.gym.create({
+      data: {
         title: 'JavaScript Gym',
         description: 'A gym for JavaScript enthusiasts',
         phone: '1234567890',
         latitude: -23.5505,
         longitude: -46.6333,
-      })
+      },
+    })
 
-    await request(app.server)
-      .post('/gyms')
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        title: 'TypeScript Gym',
-        description: 'A gym for JavaScript enthusiasts',
-        phone: '1234567890',
-        latitude: -23.5505,
-        longitude: -46.6333,
-      })
+    await prisma.checkIn.createMany({
+      data: [
+        {
+          gym_id: gym.id,
+          user_id: user.id,
+        },
+        {
+          gym_id: gym.id,
+          user_id: user.id,
+        },
+      ],
+    })
 
     const response = await request(app.server)
-      .get('/gyms/search')
-      .query({
-        q: 'JavaScript',
-      })
+      .get('/check-ins/history')
       .set('Authorization', `Bearer ${token}`)
-      .send()
+      .send({})
 
     expect(response.statusCode).toEqual(200)
-    expect(response.body.gyms).toHaveLength(1)
-    expect(response.body.gyms).toEqual([
+    expect(response.body.checkIns).toEqual([
       expect.objectContaining({
-        title: 'JavaScript Gym',
+        gym_id: gym.id,
+        user_id: user.id,
+      }),
+      expect.objectContaining({
+        gym_id: gym.id,
+        user_id: user.id,
       }),
     ])
   })
